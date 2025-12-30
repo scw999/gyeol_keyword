@@ -8,458 +8,537 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM (18.2.0) - crossorigin 추가로 로딩 안정성 확보 -->
-    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Chart.js (차트 라이브러리) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- React & UMD 호환성 패치 -->
-    <script>
-        // 일부 UMD 라이브러리가 window.react(소문자)를 찾을 때를 대비한 패치
-        window.react = window.React;
-        window['react-dom'] = window.ReactDOM;
-    </script>
-    
-    <!-- Prop-types (Recharts 의존성) -->
-    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
-
-    <!-- Recharts (Stable Version) -->
-    <script src="https://unpkg.com/recharts@2.12.3/umd/Recharts.js"></script>
-    
-    <!-- Lucide React (0.263.1 Stable) -->
-    <script src="https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.min.js"></script>
-    
-    <!-- Babel (JSX) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons (아이콘) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
 
-    <script type="text/babel">
-        // 안전하게 라이브러리 로드 확인 및 비구조화 할당
-        const { useState, useEffect, useMemo } = React;
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg italic">G</div>
+                <h1 class="text-xl font-extrabold tracking-tight hidden sm:block">결하다 마케팅 센터</h1>
+            </div>
+            
+            <form id="search-form" class="flex-1 max-w-md mx-4 relative">
+                <input id="search-input" type="text" value="소개팅" placeholder="분석 키워드 (예: 결혼, 소개팅, 결정사)"
+                    class="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm font-medium">
+                <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-slate-400"></i>
+            </form>
+
+            <div class="flex items-center gap-2">
+                <div class="hidden md:flex items-center text-xs text-slate-400 font-bold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                    <i data-lucide="shield-check" class="w-3 h-3 mr-1 text-indigo-500"></i> 브랜드 인증 모드
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        // Recharts 로드 확인
-        const RechartsLib = window.Recharts || {};
-        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = RechartsLib;
-        
-        // Lucide 아이콘 로드 확인 (0.263.1 버전은 window.lucide 사용)
-        const LucideLib = window.lucide || {};
-        const { 
-            Search, TrendingUp, Users, Calendar, Copy, ChevronRight, Target, 
-            ArrowUpRight, Info, ShieldCheck, HeartHandshake, Filter, SortDesc, UserCheck 
-        } = LucideLib;
+        <!-- Controller Section -->
+        <section class="bg-white p-6 rounded-3xl border border-slate-200 mb-8 shadow-sm">
+            <div class="flex flex-col lg:flex-row gap-8 lg:items-center justify-between">
+                <!-- Month Selector -->
+                <div class="space-y-3 flex-1">
+                    <div class="flex items-center gap-2 text-indigo-600">
+                        <i data-lucide="calendar" class="w-4 h-4"></i>
+                        <span class="text-sm font-black uppercase tracking-wider">Month Selection</span>
+                    </div>
+                    <div id="month-selector" class="flex flex-wrap gap-1.5">
+                        <!-- JS로 월 버튼 생성 -->
+                    </div>
+                </div>
 
-        const App = () => {
-            const [searchTerm, setSearchTerm] = useState('소개팅');
-            const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-            const [targetGender, setTargetGender] = useState('all'); // all, male, female
-            const [targetAge, setTargetAge] = useState('30s'); // 20s, 30s, 40s
-            const [isSearching, setIsSearching] = useState(false);
-
-            // 월 리스트 (1~12)
-            const months = Array.from({ length: 12 }, (_, i) => i + 1);
-
-            // 키워드 데이터 생성 및 타겟 우선순위 정렬 로직
-            const getProcessedKeywords = useMemo(() => {
-                const basePrefixes = [
-                    { text: '가치관 중심', maleWeight: 4, femaleWeight: 5, age20: 3, age30: 5, age40: 4 },
-                    { text: '서류 인증', maleWeight: 5, femaleWeight: 5, age20: 2, age30: 5, age40: 5 },
-                    { text: '결이 맞는', maleWeight: 3, femaleWeight: 5, age20: 3, age30: 5, age40: 4 },
-                    { text: '직장인 전용', maleWeight: 5, femaleWeight: 4, age20: 2, age30: 5, age40: 5 },
-                    { text: '신뢰할 수 있는', maleWeight: 4, femaleWeight: 5, age20: 2, age30: 4, age40: 5 },
-                    { text: '진지한 만남', maleWeight: 5, femaleWeight: 5, age20: 2, age30: 5, age40: 5 },
-                    { text: '성향 매칭', maleWeight: 3, femaleWeight: 5, age20: 4, age30: 5, age40: 3 },
-                    { text: '매너 있는', maleWeight: 4, femaleWeight: 5, age20: 3, age30: 4, age40: 4 },
-                    { text: '검증된', maleWeight: 5, femaleWeight: 5, age20: 2, age30: 5, age40: 5 },
-                    { text: '조건보다 가치관', maleWeight: 3, femaleWeight: 5, age20: 3, age30: 5, age40: 4 },
-                    { text: '품격 있는', maleWeight: 5, femaleWeight: 4, age20: 1, age30: 4, age40: 5 },
-                    { text: '대화가 잘 통하는', maleWeight: 3, femaleWeight: 5, age20: 4, age30: 5, age40: 4 },
-                    { text: '결혼 전제', maleWeight: 5, femaleWeight: 5, age20: 1, age30: 5, age40: 5 },
-                    { text: '프라이빗한', maleWeight: 5, femaleWeight: 4, age20: 2, age30: 4, age40: 5 },
-                    { text: '나와 닮은', maleWeight: 3, femaleWeight: 5, age20: 4, age30: 5, age40: 3 }
-                ];
-
-                const processed = basePrefixes.map((p, index) => {
-                    let score = 30;
-
-                    if (targetGender === 'male') score += p.maleWeight * 15;
-                    if (targetGender === 'female') score += p.femaleWeight * 15;
-
-                    if (targetAge === '20s') score += p.age20 * 10;
-                    if (targetAge === '30s') score += p.age30 * 10;
-                    if (targetAge === '40s') score += p.age40 * 10;
-
-                    const seasonalVariance = Math.sin((selectedMonth + index) * 0.5) * 20;
-                    score += Math.floor(seasonalVariance);
-
-                    return {
-                        id: index,
-                        keyword: `${p.text} ${searchTerm}`,
-                        score: Math.max(0, score),
-                        volume: 3000 + score * 80,
-                        difficulty: score > 120 ? '어려움' : score > 80 ? '보통' : '쉬움',
-                        isRising: score > 130
-                    };
-                });
-
-                return processed.sort((a, b) => b.score - a.score).slice(0, 12);
-            }, [searchTerm, selectedMonth, targetGender, targetAge]);
-
-            const trendData = useMemo(() => {
-                return months.map(m => ({
-                    name: `${m}월`,
-                    volume: 4000 + Math.floor(Math.random() * 4000) + (m === selectedMonth ? 2500 : 0)
-                }));
-            }, [selectedMonth, searchTerm]);
-
-            const handleSearch = (e) => {
-                e.preventDefault();
-                setIsSearching(true);
-                setTimeout(() => setIsSearching(false), 500);
-            };
-
-            const copyToClipboard = (text) => {
-                const el = document.createElement('textarea');
-                el.value = text;
-                document.body.appendChild(el);
-                el.select();
-                document.execCommand('copy');
-                document.body.removeChild(el);
-            };
-
-            // 라이브러리 로드 실패 감지
-            if (!window.Recharts || !window.lucide) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                        <div className="text-center p-8 bg-white rounded-2xl shadow-lg border border-slate-200">
-                            <h2 className="text-xl font-bold text-slate-800 mb-2">리소스 로딩 중...</h2>
-                            <p className="text-slate-500 mb-4">외부 라이브러리를 불러오고 있습니다.</p>
-                            <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div>
+                <!-- Priority Group -->
+                <div class="flex flex-col sm:flex-row gap-8">
+                    <!-- Gender Priority -->
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2 text-indigo-600">
+                            <i data-lucide="user-check" class="w-4 h-4"></i>
+                            <span class="text-sm font-black uppercase tracking-wider">Gender Priority</span>
+                        </div>
+                        <div id="gender-selector" class="flex bg-slate-100 p-1 rounded-2xl w-fit">
+                            <!-- JS로 성별 버튼 생성 -->
                         </div>
                     </div>
-                );
-            }
 
-            return (
-                <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-                    {/* Header */}
-                    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg italic">G</div>
-                                <h1 className="text-xl font-extrabold tracking-tight hidden sm:block">결하다 마케팅 센터</h1>
-                            </div>
-                            
-                            <form onSubmit={handleSearch} className="flex-1 max-w-md mx-4 relative">
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="분석 키워드 (예: 결혼, 소개팅, 결정사)"
-                                    className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm font-medium"
-                                />
-                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                            </form>
-
-                            <div className="flex items-center gap-2">
-                                <div className="hidden md:flex items-center text-xs text-slate-400 font-bold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                                    <ShieldCheck className="w-3 h-3 mr-1 text-indigo-500" /> 브랜드 인증 모드
-                                </div>
-                            </div>
+                    <!-- Age Priority -->
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2 text-indigo-600">
+                            <i data-lucide="target" class="w-4 h-4"></i>
+                            <span class="text-sm font-black uppercase tracking-wider">Age Priority</span>
                         </div>
-                    </header>
-
-                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                        
-                        {/* Controller Section */}
-                        <section className="bg-white p-6 rounded-3xl border border-slate-200 mb-8 shadow-sm">
-                            <div className="flex flex-col lg:flex-row gap-8 lg:items-center justify-between">
-                                {/* Month Selector */}
-                                <div className="space-y-3 flex-1">
-                                    <div className="flex items-center gap-2 text-indigo-600">
-                                        <Calendar className="w-4 h-4" />
-                                        <span className="text-sm font-black uppercase tracking-wider">Month Selection</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {months.map((m) => (
-                                            <button
-                                                key={m}
-                                                onClick={() => setSelectedMonth(m)}
-                                                className={`w-9 h-9 rounded-xl text-xs font-black transition-all border-2 ${selectedMonth === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-200'}`}
-                                            >
-                                                {m}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Priority Group */}
-                                <div className="flex flex-col sm:flex-row gap-8">
-                                    {/* Gender Priority */}
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-2 text-indigo-600">
-                                            <UserCheck className="w-4 h-4" />
-                                            <span className="text-sm font-black uppercase tracking-wider">Gender Priority</span>
-                                        </div>
-                                        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
-                                            {[178179180181182183184185186187188189190191192193194195196197198199200201202203204205206207208209210211212213214215216217218219220221222223
-$0
-                                                { id: 'all', label: '전체' },
-                                                { id: 'male', label: '남성' },
-                                                { id: 'female', label: '여성' }
-                                            ].map((g) => (
-                                                <button
-                                                    key={g.id}
-                                                    onClick={() => setTargetGender(g.id)}
-                                                    className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${targetGender === g.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
-                                                >
-                                                    {g.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Age Priority */}
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-2 text-indigo-600">
-                                            <Target className="w-4 h-4" />
-                                            <span className="text-sm font-black uppercase tracking-wider">Age Priority</span>
-                                        </div>
-                                        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
-                                            {['20s', '30s', '40s'].map((age) => (
-                                                <button
-                                                    key={age}
-                                                    onClick={() => setTargetAge(age)}
-                                                    className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${targetAge === age ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
-                                                >
-                                                    {age === '20s' ? '20대' : age === '30s' ? '30대' : '40대'}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            {/* Main Content: Keywords */}
-                            <div className="lg:col-span-2 space-y-8">
-                                <section>
-                                    <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2.5 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
-                                                <SortDesc className="w-5 h-5 text-white" />
-                                            </div>
-                                            <div>
-                                                <h2 className="text-2xl font-black text-slate-800">
-                                                    {selectedMonth}월 마케팅 골든 키워드 12
-                                                </h2>
-                                                <p className="text-slate-500 text-sm font-medium">선택하신 "{targetGender === 'all' ? '남녀전체' : targetGender === 'male' ? '남성' : '여성'} {targetAge.replace('s', '대')}" 타겟 맞춤 정렬</p>
-                                            </div>
-                                        </div>
-                                        <button 
-                                            onClick={() => copyToClipboard(getProcessedKeywords.map(k => k.keyword).join(', '))}
-                                            className="px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-2xl text-xs font-black hover:bg-indigo-100 transition-all flex items-center gap-2"
-                                        >
-                                            <Copy className="w-4 h-4" /> 리스트 전체 복사
-                                        </button>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                                        {getProcessedKeywords.map((item, index) => (
-                                            <div 
-                                                key={item.keyword}
-                                                className="p-6 rounded-[32px] bg-white border border-slate-200 transition-all hover:shadow-2xl hover:border-indigo-300 group relative overflow-hidden"
-                                            >
-                                                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                                                    <Target className="w-12 h-12 text-indigo-600" />
-                                                </div>
-                                                
-                                                <div className="flex justify-between items-start mb-5">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-7 h-7 bg-slate-900 rounded-xl flex items-center justify-center text-[11px] font-black text-white">
-                                                            {index + 1}
-                                                        </span>
-                                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-tight ${
-                                                            item.difficulty === '쉬움' ? 'bg-emerald-100 text-emerald-700' : 
-                                                            item.difficulty === '보통' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
-                                                        }`}>
-                                                            {item.difficulty}
-                                                        </span>
-                                                    </div>
-                                                    {item.isRising && <TrendingUp className="w-4 h-4 text-rose-500 animate-pulse" />}
-                                                </div>
-                                                
-                                                <h3 className="font-extrabold text-slate-800 text-lg leading-tight mb-4 group-hover:text-indigo-600 transition-colors">
-                                                    {item.keyword}
-                                                </h3>
-                                                
-                                                <div className="flex items-end justify-between mt-auto pt-4 border-t border-slate-50">
-                                                    <div>
-                                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1.5">Score</p>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                                <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, (item.score / 200) * 100)}%` }}></div>
-                                                            </div>
-                                                            <span className="text-xs font-black text-indigo-600">{item.score}</span>
-                                                        </div>
-                                                    </div>
-                                                    <button 
-                                                        onClick={() => copyToClipboard(item.keyword)}
-                                                        className="p-2.5 bg-slate-50 rounded-2xl hover:bg-indigo-600 hover:text-white text-slate-400 transition-all"
-                                                    >
-                                                        <Copy className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
-
-                                {/* Trend Chart */}
-                                <section className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
-                                    <div className="flex items-center justify-between mb-10">
-                                        <h2 className="text-xl font-black flex items-center gap-2 text-slate-800">
-                                            <TrendingUp className="text-indigo-600 w-6 h-6" /> 마케팅 유효성 시뮬레이션
-                                        </h2>
-                                        <div className="px-4 py-2 bg-slate-100 rounded-2xl text-[11px] font-black text-slate-500">
-                                            {searchTerm} 관련 통합 분석
-                                        </div>
-                                    </div>
-                                    <div className="h-64 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={trendData}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#94a3b8', fontWeight: 800}} />
-                                                <YAxis hide />
-                                                <Tooltip 
-                                                    contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', padding: '16px'}}
-                                                    labelStyle={{fontWeight: 900, marginBottom: '4px'}}
-                                                />
-                                                <Line 
-                                                    type="monotone" 
-                                                    dataKey="volume" 
-                                                    stroke="#6366f1" 
-                                                    strokeWidth={5} 
-                                                    dot={(props) => {
-                                                        const { cx, cy, payload } = props;
-                                                        const isSelected = payload.name === `${selectedMonth}월`;
-                                                        // React Warning 해결: Recharts에서 전달된 props의 key를 사용
-                                                        return <circle key={props.key} cx={cx} cy={cy} r={isSelected ? 8 : 5} fill={isSelected ? '#6366f1' : '#cbd5e1'} stroke="#fff" strokeWidth={isSelected ? 3 : 2} />;
-                                                    }}
-                                                    activeDot={{r: 10, strokeWidth: 0}}
-                                                />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </section>
-                            </div>
-
-                            {/* Sidebar: Insights */}
-                            <div className="space-y-8">
-                                <section className="bg-indigo-950 text-white p-8 rounded-[40px] shadow-2xl relative overflow-hidden group">
-                                    <div className="relative z-10">
-                                        <div className="flex items-center gap-2 mb-8 text-indigo-400">
-                                            <Info className="w-5 h-5" />
-                                            <span className="text-[11px] font-black uppercase tracking-[0.2em]">Persona Guide</span>
-                                        </div>
-                                        <h2 className="text-2xl font-black mb-4 leading-tight">
-                                            {targetGender === 'all' ? '전체' : targetGender === 'male' ? '남성' : '여성'} {targetAge.replace('s', '대')} 타겟 <br/>공략 브리핑
-                                        </h2>
-                                        <p className="text-indigo-200/60 text-sm mb-10 leading-relaxed font-medium">
-                                            {targetAge === '30s' 
-                                                ? '안정적 커리어와 성숙한 가치관을 중시하며, 단순한 유흥보다 "결이 맞는 대화"에 강하게 반응합니다.' 
-                                                : targetAge === '20s' 
-                                                ? '합리적인 신뢰 정보와 서류 기반의 확실한 인증 절차를 통해 안정감을 느끼고 싶어 합니다.'
-                                                : '깊이 있는 관계와 차별화된 고품질 매칭 서비스에 대한 선호도가 매우 높습니다.'}
-                                        </p>
-                                        
-                                        <div className="space-y-4">
-                                            <div className="bg-white/5 p-5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
-                                                <p className="text-[10px] text-indigo-400 font-black mb-2 uppercase tracking-widest">추천 소구점</p>
-                                                <p className="text-sm font-bold leading-snug">"{targetGender === 'female' ? '공감과 가치관' : '인증과 전문성'}" 중심의 스토리텔링</p>
-                                            </div>
-                                            <div className="bg-white/5 p-5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
-                                                <p className="text-[10px] text-indigo-400 font-black mb-2 uppercase tracking-widest">메인 해시태그</p>
-                                                <p className="text-sm font-bold leading-snug">#결하다 #가치관매칭 #인증소개팅 #직장인연애</p>
-                                            </div>
-                                        </div>
-
-                                        <button className="w-full mt-10 py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-[24px] font-black text-sm flex items-center justify-center gap-2 transition-all shadow-xl shadow-indigo-950/40 group-hover:scale-[1.02]">
-                                            AI 맞춤형 카피 생성 <ChevronRight className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-indigo-500 rounded-full blur-[120px] opacity-20"></div>
-                                </section>
-
-                                <section className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
-                                    <h2 className="text-lg font-black mb-8 flex items-center gap-2 text-slate-800">
-                                        <ShieldCheck className="text-indigo-600 w-6 h-6" /> 신뢰 마케팅 핵심 지표
-                                    </h2>
-                                    <div className="space-y-6">
-                                        {[
-                                            { label: '서류 인증 프로필 신뢰도', value: 94 },
-                                            { label: '성향 기반 매칭 만족도', value: 89 },
-                                            { label: '결이 맞는 유저 비중', value: 85 }
-                                        ].map((item) => (
-                                            <div key={item.label} className="space-y-3">
-                                                <div className="flex justify-between text-xs font-black">
-                                                    <span className="text-slate-500">{item.label}</span>
-                                                    <span className="text-indigo-600">{item.value}%</span>
-                                                </div>
-                                                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${item.value}%` }}></div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
-
-                                <section className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
-                                    <h2 className="text-lg font-black mb-6 flex items-center gap-2 text-indigo-600">
-                                        <HeartHandshake className="w-6 h-6" /> 가치관 키워드 태그
-                                    </h2>
-                                    <div className="flex flex-wrap gap-2">
-                                        {['결이 같은', '대화가 깊은', '취향 매칭', '신원 검증', '진정성', '프라이빗'].map((tag) => (
-                                            <span 
-                                                key={tag} 
-                                                className="px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-2xl text-[11px] font-black border border-indigo-100 cursor-pointer hover:bg-indigo-600 hover:text-white transition-all"
-                                            >
-                                                #{tag}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </section>
-                            </div>
+                        <div id="age-selector" class="flex bg-slate-100 p-1 rounded-2xl w-fit">
+                            <!-- JS로 연령 버튼 생성 -->
                         </div>
-                    </main>
-
-                    {isSearching && (
-                        <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-50 flex items-center justify-center">
-                            <div className="flex flex-col items-center gap-8">
-                                <div className="relative">
-                                    <div className="w-20 h-20 border-8 border-slate-100 rounded-full"></div>
-                                    <div className="w-20 h-20 border-8 border-indigo-600 border-t-transparent rounded-full animate-spin absolute top-0"></div>
-                                </div>
-                                <div className="text-center">
-                                    <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">타겟팅 최적화 분석 중</p>
-                                    <p className="text-sm text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
-                                        {searchTerm} 기반 {selectedMonth}월 <br/> 마케팅 매트릭스를 구성하고 있습니다
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    </div>
                 </div>
-            );
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Main Content: Keywords -->
+            <div class="lg:col-span-2 space-y-8">
+                <section>
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2.5 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
+                                <i data-lucide="sort-desc" class="w-5 h-5 text-white"></i>
+                            </div>
+                            <div>
+                                <h2 id="keyword-header-title" class="text-2xl font-black text-slate-800">
+                                    1월 마케팅 골든 키워드 12
+                                </h2>
+                                <p id="keyword-header-desc" class="text-slate-500 text-sm font-medium">타겟 맞춤 정렬</p>
+                            </div>
+                        </div>
+                        <button onclick="copyAllKeywords()" class="px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-2xl text-xs font-black hover:bg-indigo-100 transition-all flex items-center gap-2">
+                            <i data-lucide="copy" class="w-4 h-4"></i> 리스트 전체 복사
+                        </button>
+                    </div>
+
+                    <div id="keyword-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                        <!-- JS로 키워드 카드 생성 -->
+                    </div>
+                </section>
+
+                <!-- Trend Chart -->
+                <section class="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-10">
+                        <h2 class="text-xl font-black flex items-center gap-2 text-slate-800">
+                            <i data-lucide="trending-up" class="text-indigo-600 w-6 h-6"></i> 마케팅 유효성 시뮬레이션
+                        </h2>
+                        <div id="chart-badge" class="px-4 py-2 bg-slate-100 rounded-2xl text-[11px] font-black text-slate-500">
+                            통합 분석
+                        </div>
+                    </div>
+                    <div class="h-64 w-full">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Sidebar: Insights -->
+            <div class="space-y-8">
+                <section class="bg-indigo-950 text-white p-8 rounded-[40px] shadow-2xl relative overflow-hidden group">
+                    <div class="relative z-10">
+                        <div class="flex items-center gap-2 mb-8 text-indigo-400">
+                            <i data-lucide="info" class="w-5 h-5"></i>
+                            <span class="text-[11px] font-black uppercase tracking-[0.2em]">Persona Guide</span>
+                        </div>
+                        <h2 id="persona-title" class="text-2xl font-black mb-4 leading-tight">
+                            타겟 공략 브리핑
+                        </h2>
+                        <p id="persona-desc" class="text-indigo-200/60 text-sm mb-10 leading-relaxed font-medium">
+                            가이드 내용...
+                        </p>
+                        
+                        <div class="space-y-4">
+                            <div class="bg-white/5 p-5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
+                                <p class="text-[10px] text-indigo-400 font-black mb-2 uppercase tracking-widest">추천 소구점</p>
+                                <p id="persona-point" class="text-sm font-bold leading-snug">스토리텔링</p>
+                            </div>
+                            <div class="bg-white/5 p-5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
+                                <p class="text-[10px] text-indigo-400 font-black mb-2 uppercase tracking-widest">메인 해시태그</p>
+                                <p class="text-sm font-bold leading-snug">#결하다 #가치관매칭 #인증소개팅 #직장인연애</p>
+                            </div>
+                        </div>
+
+                        <button class="w-full mt-10 py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-[24px] font-black text-sm flex items-center justify-center gap-2 transition-all shadow-xl shadow-indigo-950/40 group-hover:scale-[1.02]">
+                           AI 맞춤형 카피 생성 <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div class="absolute -bottom-20 -right-20 w-64 h-64 bg-indigo-500 rounded-full blur-[120px] opacity-20"></div>
+                </section>
+
+                <section class="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
+                    <h2 class="text-lg font-black mb-8 flex items-center gap-2 text-slate-800">
+                        <i data-lucide="shield-check" class="text-indigo-600 w-6 h-6"></i> 신뢰 마케팅 핵심 지표
+                    </h2>
+                    <div class="space-y-6">
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-xs font-black">
+                                <span class="text-slate-500">서류 인증 프로필 신뢰도</span>
+                                <span class="text-indigo-600">94%</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div class="h-full bg-indigo-500 rounded-full" style="width: 94%"></div>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-xs font-black">
+                                <span class="text-slate-500">성향 기반 매칭 만족도</span>
+                                <span class="text-indigo-600">89%</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div class="h-full bg-indigo-500 rounded-full" style="width: 89%"></div>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-xs font-black">
+                                <span class="text-slate-500">결이 맞는 유저 비중</span>
+                                <span class="text-indigo-600">85%</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div class="h-full bg-indigo-500 rounded-full" style="width: 85%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
+                    <h2 class="text-lg font-black mb-6 flex items-center gap-2 text-indigo-600">
+                        <i data-lucide="heart-handshake" class="w-6 h-6"></i> 가치관 키워드 태그
+                    </h2>
+                    <div class="flex flex-wrap gap-2" id="tag-cloud">
+                        <!-- Tags injected by JS -->
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- 로딩 오버레이 -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/95 backdrop-blur-xl z-50 flex items-center justify-center hidden">
+        <div class="flex flex-col items-center gap-8">
+            <div class="relative">
+                <div class="w-20 h-20 border-8 border-slate-100 rounded-full"></div>
+                <div class="w-20 h-20 border-8 border-indigo-600 border-t-transparent rounded-full animate-spin absolute top-0"></div>
+            </div>
+            <div class="text-center">
+                <p class="font-black text-2xl text-slate-900 mb-2 tracking-tight">타겟팅 최적화 분석 중</p>
+                <p id="loading-text" class="text-sm text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
+                    데이터 분석 중...
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            searchTerm: '소개팅',
+            selectedMonth: new Date().getMonth() + 1,
+            targetGender: 'all', // all, male, female
+            targetAge: '30s', // 20s, 30s, 40s
+            isSearching: false
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        let chartInstance = null;
+        let currentKeywords = [];
+
+        // --- Data Logic ---
+        const getProcessedKeywords = () => {
+            const basePrefixes = [
+                { text: '가치관 중심', maleWeight: 4, femaleWeight: 5, age20: 3, age30: 5, age40: 4 },
+                { text: '서류 인증', maleWeight: 5, femaleWeight: 5, age20: 2, age30: 5, age40: 5 },
+                { text: '결이 맞는', maleWeight: 3, femaleWeight: 5, age20: 3, age30: 5, age40: 4 },
+                { text: '직장인 전용', maleWeight: 5, femaleWeight: 4, age20: 2, age30: 5, age40: 5 },
+                { text: '신뢰할 수 있는', maleWeight: 4, femaleWeight: 5, age20: 2, age30: 4, age40: 5 },
+                { text: '진지한 만남', maleWeight: 5, femaleWeight: 5, age20: 2, age30: 5, age40: 5 },
+                { text: '성향 매칭', maleWeight: 3, femaleWeight: 5, age20: 4, age30: 5, age40: 3 },
+                { text: '매너 있는', maleWeight: 4, femaleWeight: 5, age20: 3, age30: 4, age40: 4 },
+                { text: '검증된', maleWeight: 5, femaleWeight: 5, age20: 2, age30: 5, age40: 5 },
+                { text: '조건보다 가치관', maleWeight: 3, femaleWeight: 5, age20: 3, age30: 5, age40: 4 },
+                { text: '품격 있는', maleWeight: 5, femaleWeight: 4, age20: 1, age30: 4, age40: 5 },
+                { text: '대화가 잘 통하는', maleWeight: 3, femaleWeight: 5, age20: 4, age30: 5, age40: 4 },
+                { text: '결혼 전제', maleWeight: 5, femaleWeight: 5, age20: 1, age30: 5, age40: 5 },
+                { text: '프라이빗한', maleWeight: 5, femaleWeight: 4, age20: 2, age30: 4, age40: 5 },
+                { text: '나와 닮은', maleWeight: 3, femaleWeight: 5, age20: 4, age30: 5, age40: 3 }
+            ];
+
+            const processed = basePrefixes.map((p, index) => {
+                let score = 30;
+                if (state.targetGender === 'male') score += p.maleWeight * 15;
+                if (state.targetGender === 'female') score += p.femaleWeight * 15;
+                if (state.targetAge === '20s') score += p.age20 * 10;
+                if (state.targetAge === '30s') score += p.age30 * 10;
+                if (state.targetAge === '40s') score += p.age40 * 10;
+
+                const seasonalVariance = Math.sin((state.selectedMonth + index) * 0.5) * 20;
+                score += Math.floor(seasonalVariance);
+
+                return {
+                    id: index,
+                    keyword: `${p.text} ${state.searchTerm}`,
+                    score: Math.max(0, score),
+                    difficulty: score > 120 ? '어려움' : score > 80 ? '보통' : '쉬움',
+                    isRising: score > 130
+                };
+            });
+
+            return processed.sort((a, b) => b.score - a.score).slice(0, 12);
+        };
+
+        const getTrendData = () => {
+            const months = Array.from({ length: 12 }, (_, i) => i + 1);
+            return months.map(m => ({
+                month: `${m}월`,
+                volume: 4000 + Math.floor(Math.random() * 4000) + (m === state.selectedMonth ? 2500 : 0)
+            }));
+        };
+
+        // --- Render Functions ---
+        function renderMonthSelector() {
+            const container = document.getElementById('month-selector');
+            container.innerHTML = '';
+            for (let i = 1; i <= 12; i++) {
+                const btn = document.createElement('button');
+                const isActive = state.selectedMonth === i;
+                btn.className = `w-9 h-9 rounded-xl text-xs font-black transition-all border-2 ${isActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-200'}`;
+                btn.innerText = i;
+                btn.onclick = () => { state.selectedMonth = i; updateUI(); };
+                container.appendChild(btn);
+            }
+        }
+
+        function renderFilters() {
+            // Gender
+            const genderContainer = document.getElementById('gender-selector');
+            genderContainer.innerHTML = '';
+            const genders = [
+                { id: 'all', label: '전체' },
+                { id: 'male', label: '남성' },
+                { id: 'female', label: '여성' }
+            ];
+            genders.forEach(g => {
+                const btn = document.createElement('button');
+                const isActive = state.targetGender === g.id;
+                btn.className = `px-5 py-2 rounded-xl text-xs font-black transition-all ${isActive ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`;
+                btn.innerText = g.label;
+                btn.onclick = () => { state.targetGender = g.id; updateUI(); };
+                genderContainer.appendChild(btn);
+            });
+
+            // Age
+            const ageContainer = document.getElementById('age-selector');
+            ageContainer.innerHTML = '';
+            const ages = [
+                { id: '20s', label: '20대' },
+                { id: '30s', label: '30대' },
+                { id: '40s', label: '40대' }
+            ];
+            ages.forEach(a => {
+                const btn = document.createElement('button');
+                const isActive = state.targetAge === a.id;
+                btn.className = `px-5 py-2 rounded-xl text-xs font-black transition-all ${isActive ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`;
+                btn.innerText = a.label;
+                btn.onclick = () => { state.targetAge = a.id; updateUI(); };
+                ageContainer.appendChild(btn);
+            });
+        }
+
+        function renderKeywords() {
+            const list = document.getElementById('keyword-list');
+            list.innerHTML = '';
+            currentKeywords = getProcessedKeywords();
+            
+            // Header Info
+            const genderText = state.targetGender === 'all' ? '남녀전체' : state.targetGender === 'male' ? '남성' : '여성';
+            const ageText = state.targetAge.replace('s', '대');
+            document.getElementById('keyword-header-title').innerText = `${state.selectedMonth}월 마케팅 골든 키워드 12`;
+            document.getElementById('keyword-header-desc').innerText = `선택하신 "${genderText} ${ageText}" 타겟 맞춤 정렬`;
+
+            currentKeywords.forEach((item, index) => {
+                const diffColor = item.difficulty === '쉬움' ? 'bg-emerald-100 text-emerald-700' : 
+                                 item.difficulty === '보통' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700';
+                
+                const card = document.createElement('div');
+                card.className = "p-6 rounded-[32px] bg-white border border-slate-200 transition-all hover:shadow-2xl hover:border-indigo-300 group relative overflow-hidden";
+                card.innerHTML = `
+                    <div class="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <i data-lucide="target" class="w-12 h-12 text-indigo-600"></i>
+                    </div>
+                    
+                    <div class="flex justify-between items-start mb-5">
+                        <div class="flex items-center gap-2">
+                            <span class="w-7 h-7 bg-slate-900 rounded-xl flex items-center justify-center text-[11px] font-black text-white">
+                                ${index + 1}
+                            </span>
+                            <span class="px-2.5 py-1 rounded-lg text-[10px] font-black tracking-tight ${diffColor}">
+                                ${item.difficulty}
+                            </span>
+                        </div>
+                        ${item.isRising ? '<i data-lucide="trending-up" class="w-4 h-4 text-rose-500 animate-pulse"></i>' : ''}
+                    </div>
+                    
+                    <h3 class="font-extrabold text-slate-800 text-lg leading-tight mb-4 group-hover:text-indigo-600 transition-colors">
+                        ${item.keyword}
+                    </h3>
+                    
+                    <div class="flex items-end justify-between mt-auto pt-4 border-t border-slate-50">
+                        <div>
+                            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1.5">Score</p>
+                            <div class="flex items-center gap-2">
+                               <div class="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div class="h-full bg-indigo-500 rounded-full" style="width: ${Math.min(100, (item.score / 200) * 100)}%"></div>
+                               </div>
+                               <span class="text-xs font-black text-indigo-600">${item.score}</span>
+                            </div>
+                        </div>
+                        <button onclick="copyToClipboard('${item.keyword}')" class="p-2.5 bg-slate-50 rounded-2xl hover:bg-indigo-600 hover:text-white text-slate-400 transition-all">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const data = getTrendData();
+            const labels = data.map(d => d.month);
+            const volumes = data.map(d => d.volume);
+
+            document.getElementById('chart-badge').innerText = `${state.searchTerm} 관련 통합 분석`;
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '검색량',
+                        data: volumes,
+                        borderColor: '#6366f1',
+                        backgroundColor: (context) => {
+                            const ctx = context.chart.ctx;
+                            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.2)');
+                            gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+                            return gradient;
+                        },
+                        borderWidth: 4,
+                        pointBackgroundColor: (ctx) => ctx.dataIndex === state.selectedMonth - 1 ? '#6366f1' : '#cbd5e1',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: (ctx) => ctx.dataIndex === state.selectedMonth - 1 ? 8 : 4,
+                        pointHoverRadius: 8,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#475569',
+                            titleFont: { weight: 'bold', size: 14 },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            displayColors: false,
+                            callbacks: {
+                                label: (context) => `검색량: ${context.parsed.y.toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { weight: 'bold' }, color: '#94a3b8' } },
+                        y: { display: false }
+                    }
+                }
+            });
+        }
+
+        function renderPersona() {
+            const genderText = state.targetGender === 'all' ? '전체' : state.targetGender === 'male' ? '남성' : '여성';
+            const ageText = state.targetAge.replace('s', '대');
+            
+            document.getElementById('persona-title').innerHTML = `${genderText} ${ageText} 타겟 <br/>공략 브리핑`;
+            
+            let desc = "";
+            if (state.targetAge === '30s') desc = '안정적 커리어와 성숙한 가치관을 중시하며, 단순한 유흥보다 "결이 맞는 대화"에 강하게 반응합니다.';
+            else if (state.targetAge === '20s') desc = '합리적인 신뢰 정보와 서류 기반의 확실한 인증 절차를 통해 안정감을 느끼고 싶어 합니다.';
+            else desc = '깊이 있는 관계와 차별화된 고품질 매칭 서비스에 대한 선호도가 매우 높습니다.';
+            
+            document.getElementById('persona-desc').innerText = desc;
+            document.getElementById('persona-point').innerText = `"${state.targetGender === 'female' ? '공감과 가치관' : '인증과 전문성'}" 중심의 스토리텔링`;
+        }
+
+        function renderTags() {
+            const container = document.getElementById('tag-cloud');
+            container.innerHTML = '';
+            const tags = ['결이 같은', '대화가 깊은', '취향 매칭', '신원 검증', '진정성', '프라이빗'];
+            tags.forEach(tag => {
+                const span = document.createElement('span');
+                span.className = "px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-2xl text-[11px] font-black border border-indigo-100 cursor-pointer hover:bg-indigo-600 hover:text-white transition-all";
+                span.innerText = `#${tag}`;
+                container.appendChild(span);
+            });
+        }
+
+        // --- Interactivity ---
+        function updateUI() {
+            renderMonthSelector();
+            renderFilters();
+            renderKeywords();
+            renderChart();
+            renderPersona();
+            lucide.createIcons(); // Refresh icons
+        }
+
+        async function performSearch(e) {
+            if(e) e.preventDefault();
+            const input = document.getElementById('search-input');
+            state.searchTerm = input.value || '소개팅';
+            
+            // Show Loading
+            const overlay = document.getElementById('loading-overlay');
+            const loadingText = document.getElementById('loading-text');
+            overlay.classList.remove('hidden');
+            loadingText.innerHTML = `${state.searchTerm} 기반 ${state.selectedMonth}월 <br/> 마케팅 매트릭스를 구성하고 있습니다`;
+
+            // Simulate Delay
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            updateUI();
+            overlay.classList.add('hidden');
+        }
+
+        function copyToClipboard(text) {
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            // alert(`${text} 복사 완료!`); // Optional
+        }
+
+        function copyAllKeywords() {
+            const text = currentKeywords.map(k => k.keyword).join(', ');
+            copyToClipboard(text);
+        }
+
+        // --- Init ---
+        document.getElementById('search-form').addEventListener('submit', performSearch);
+        renderTags();
+        updateUI();
+
     </script>
 </body>
 </html>
